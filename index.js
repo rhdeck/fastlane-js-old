@@ -70,20 +70,26 @@ const send = async ({ commandType, command }) => {
     try {
       removeError();
       const o = JSON.parse(d);
-      if (o.payload) {
-        if (o.payload.status === "failure") {
-          reject({
-            error: "fastlane_failure",
-            description: o.payload.failure_information.join("\n"),
-          });
-        } else if (typeof o.payload.return_object === "undefined") {
-          reject(o);
+      try {
+        if (o.payload) {
+          if (o.payload.status === "failure") {
+            reject({
+              error: "fastlane_failure",
+              description: o.payload.failure_information.join("\n"),
+              raw: o,
+            });
+          } else if (typeof o.payload.return_object === "undefined") {
+            reject(o);
+          }
+          const result = o.payload.return_object;
+          resolve(result);
         }
-        const result = o.payload.return_object;
-        resolve(result);
+      } catch (e) {
+        console.log("Problem resolving the payload after parsing");
+        reject(e);
       }
     } catch (e) {
-      console.log("Coudl not parse json", d);
+      console.log("Could not parse json", d);
       removeError();
       reject(e);
     }
