@@ -76,7 +76,7 @@ const send = async ({ commandType, command }) => {
         if (o.payload.status === "failure") {
           reject({
             error: "fastlane_failure",
-            data: o.payload.failure_information,
+            description: o.payload.failure_information.join("\n"),
           });
         } else if (typeof o.payload.return_object === "undefined") {
           reject(o);
@@ -96,16 +96,18 @@ const send = async ({ commandType, command }) => {
 //#region Exported Functions
 const close = async () => {
   const { resolve, promise } = new Deferred();
+  const remove = once("error", () => {});
   socket.end(() => {
+    remove();
     socket = null;
+    childProcess.kill("SIGHUP");
+    childProcess = null;
     resolve();
   });
-  childProcess.kill("SIGHUP");
-  childProcess = null;
   return promise;
 };
 const doAction = async (action, argObj) => {
-  if (!socket) await init();
+  await init();
   const args = argObj
     ? Object.entries(argObj).map(([name, value]) => ({ name, value }))
     : undefined;
