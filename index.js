@@ -31,8 +31,8 @@ const launch = (interactive = true) => {
       : {}
   );
 };
-const init = async (newPort = 2000) => {
-  if (!childProcess) launch();
+const init = async (interactive = true, newPort = 2000) => {
+  if (!childProcess) launch(interactive);
   // port = newPort; //Ignored for now because fastlane command line doesn't support setting the port
   while (true) {
     const s = (
@@ -57,24 +57,31 @@ const send = async ({ commandType, command }) => {
   socket.write(json);
   return waitForData();
 };
-const dataOnce = (f) => {
+const once = (event, f) => {
   const listener = (d) => {
-    socket.removeListener("data", listener);
+    socket.removeListener(event, listener);
     f(d);
   };
-  socket.on("data", listener);
+  socket.on(event, listener);
+  return () => socket.removeListener(event, listener);
 };
 const waitForData = async () => {
   const { resolve, promise } = new Deferred();
   socket.setEncoding("utf8");
-  dataOnce((d) => {
+  const removeError = once("error", (d) => reject(d));
+  once("data", (d) => {
     try {
       const o = JSON.parse(d);
-      if (typeof o.payload.return_object === "undefined") reject(o);
+      if (typeof o.payload.return_object === "undefined") {
+        removeError();
+        reject(o);
+      }
       const result = o.payload.return_object;
+      removeError();
       resolve(result);
     } catch (e) {
       console.log("Coudl not parse json", d);
+      removeError();
       reject(e);
     }
   });
@@ -109,4 +116,4 @@ const doActionOnce = async (action, argobj) => {
   return result;
 };
 //#endregion
-module.exports = { doAction, close, doActionOnce, launch };
+module.exports = { doAction, close, doActionOnce, init };
