@@ -53,7 +53,6 @@ const init = async (interactive = true, newPort = 2000) => {
 };
 const once = (event, f) => {
   const listener = (d) => {
-    console.log("removing listener for event", event);
     socket.removeListener(event, listener);
     f(d);
   };
@@ -63,7 +62,6 @@ const once = (event, f) => {
 const send = async ({ commandType, command }) => {
   if (!socket) throw "Socket not initialized";
   const json = JSON.stringify({ commandType, command });
-  console.log("sending json of", json);
   socket.write(json);
   const { resolve, promise, reject } = new Deferred();
   socket.setEncoding("utf8");
