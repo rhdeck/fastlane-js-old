@@ -1,0 +1,27 @@
+{
+  "name": "@raydeck/fastlane",
+  "version": "1.0.0",
+  "description": "JS Interface for many fastlane actions designed for react-native ",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rhdeck/fastlane-js.git"
+  },
+  "keywords": [
+    "fastlane"
+  ],
+  "author": "Ray Deck",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/rhdeck/fastlane-js/issues"
+  },
+  "homepage": "https://github.com/rhdeck/fastlane-js#readme",
+  "dependencies": {
+    "chalk": "^4.0.0",
+    "commander": "^5.0.0",
+    "es6-deferred": "^1.3.0"
+  }
+}
