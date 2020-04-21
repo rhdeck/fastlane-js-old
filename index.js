@@ -33,6 +33,7 @@ const launch = (interactive = true) => {
 };
 const init = async (interactive = true, newPort = 2000) => {
   if (!childProcess) launch(interactive);
+  if (socket) return socket;
   // port = newPort; //Ignored for now because fastlane command line doesn't support setting the port
   while (true) {
     const s = (
@@ -50,35 +51,39 @@ const init = async (interactive = true, newPort = 2000) => {
     sleep(500);
   }
 };
-const send = async ({ commandType, command }) => {
-  if (!socket) throw "Socket not initialized";
-  const { resolve, reject, promise } = new Deferred();
-  const json = JSON.stringify({ commandType, command });
-  socket.write(json);
-  return waitForData();
-};
 const once = (event, f) => {
   const listener = (d) => {
+    console.log("removing listener for event", event);
     socket.removeListener(event, listener);
     f(d);
   };
   socket.on(event, listener);
   return () => socket.removeListener(event, listener);
 };
-const waitForData = async () => {
-  const { resolve, promise } = new Deferred();
+const send = async ({ commandType, command }) => {
+  if (!socket) throw "Socket not initialized";
+  const json = JSON.stringify({ commandType, command });
+  console.log("sending json of", json);
+  socket.write(json);
+  const { resolve, promise, reject } = new Deferred();
   socket.setEncoding("utf8");
   const removeError = once("error", (d) => reject(d));
   once("data", (d) => {
     try {
-      const o = JSON.parse(d);
-      if (typeof o.payload.return_object === "undefined") {
-        removeError();
-        reject(o);
-      }
-      const result = o.payload.return_object;
       removeError();
-      resolve(result);
+      const o = JSON.parse(d);
+      if (o.payload) {
+        if (o.payload.status === "failure") {
+          reject({
+            error: "fastlane_failure",
+            data: o.payload.failure_information,
+          });
+        } else if (typeof o.payload.return_object === "undefined") {
+          reject(o);
+        }
+        const result = o.payload.return_object;
+        resolve(result);
+      }
     } catch (e) {
       console.log("Coudl not parse json", d);
       removeError();
@@ -91,12 +96,12 @@ const waitForData = async () => {
 //#region Exported Functions
 const close = async () => {
   const { resolve, promise } = new Deferred();
-  childProcess.kill("SIGHUP");
-  childProcess = null;
   socket.end(() => {
     socket = null;
     resolve();
   });
+  childProcess.kill("SIGHUP");
+  childProcess = null;
   return promise;
 };
 const doAction = async (action, argObj) => {
