@@ -121,7 +121,8 @@ const doAction = async (action, argObj) => {
   };
   return send(command);
 };
-const doActionOnce = async (action, argobj) => {
+const doActionOnce = async (action, argobj, isInteractive = true) => {
+  await init(isInteractive);
   const result = await doAction(action, argobj);
   await close();
   return result;
