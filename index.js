@@ -121,11 +121,14 @@ const doAction = async (action, argObj) => {
   };
   return send(command);
 };
-const doActionOnce = async (action, argobj, isInteractive = true) => {
-  await init(isInteractive);
-  const result = await doAction(action, argobj);
+const withFastlane = async (f, isInteractive) => {
+  await init(isInterActive);
+  const result = await f();
   await close();
   return result;
 };
+const doActionOnce = async (action, argobj, isInteractive = true) =>
+  withFastLane(() => doAction(action, argobj), isInteractive);
+
 //#endregion
-module.exports = { doAction, close, doActionOnce, init };
+module.exports = { doAction, close, doActionOnce, init, withFastlane };
