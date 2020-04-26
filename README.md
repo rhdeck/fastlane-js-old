@@ -1,10 +1,10 @@
-# fastlane-js
+# Fastlane-js
 
-Javascript interface to fastlane
+Javascript interface to Fastlane
 
 ## Requirements
 
-**Fastlane** is required
+**Fastlane** is required to have been installed: use `gem install Fastlane`
 
 ## Installation
 
@@ -12,23 +12,55 @@ Javascript interface to fastlane
 yarn add @raydeck/fastlane
 ```
 
-## Usage
+## Class Fastlane
 
-### async doAction(action, arguments) => Any
+### async doAction(action, arguments) => Promise<Any>
 
-Returns the same result as running this fastlane result in Ruby would. (note that there are excceptions where the Fastlane socket driver delivers suboptimal serializations of Ruby objects, such as with the action `adb_devices`)
+Returns the same result as running this Fastlane result in Ruby would. (note that there are excceptions where the Fastlane socket driver delivers suboptimal serializations of Ruby objects, such as with the action `adb_devices`). Starts the session automatically when you ask for the first action.
 
-### async withFastlane(function ()=> Promise, isInteractive = true)
+### async close() => Promise<Void>
 
-The main helper function to control a fastlane session. Wrap calls to doAction inside this call.
+Closes the connection to fastlane.
 
-- **function**: `async` function (returning a promise) containing the block of code to run during the Fastlane session. Note the session is initialized right before executing the function and closed right afterward.
-- **isInteractive**: Boolean of whether to pass stdin/stdout of the socket server to the calling client. This should be `true` when you might need to respond to requests for, say, apple logins.
+## async withFastlane(options: FastlaneOptions, func (fastlane: Fastlane)=> Promise)
+
+The main helper function to control a Fastlane session.
+
+- `options` (optional): Object of options to pass to the fastlane session:
+  - `isInteractive: Boolean` whether to pass stdin/stdout of the socket server to the calling client. This should be `true` when you might need to respond to requests for, say, apple logins.
+  - `port: Int` specify the port number of the connection (default `2000`)
+- `func`: async function (returning a promise) containing the block of code to run during the Fastlane session, passed the `Fastlane` instance as its first and only argument. Note the session is initialized right before executing the function and closed right afterward.
+
+## Example
 
 ```js
-await withFastlane(async () => {
+await withFastlane(async (fastlane) => {
+  await fastlane.doAction("send_to_testflight", {
+    application_id: "xxxx" /*...*/,
+  });
+});
+// is the same as
+await withFastlane({ isInteractive: true, port: 2000 }, async (fastlane) => {
+  await fastlane.doAction("send_to_testflight", {
+    application_id: "xxxx" /*...*/,
+  });
+});
+// is the same as
+await withFastlane(async ({ doAction }) => {
   await doAction("send_to_testflight", { application_id: "xxxx" /*...*/ });
 });
+// is the same as
+const fastlane = new Fastlane(2000, true);
+await fastlane.doAction("send_to_testflight", {
+  application_id: "xxxx" /*...*/,
+});
+fastlane.close();
+// is the same as
+const fastlane = new Fastlane();
+await fastlane.doAction("send_to_testflight", {
+  application_id: "xxxx" /*...*/,
+});
+fastlane.close();
 ```
 
 ## Additional Helper functions
@@ -43,6 +75,6 @@ Imperatively initialize the child Fastlane server process and connect using sock
 
 ### async close() => Void
 
-Close the connection to the fastlane socket server and terminate the fastlane socket server process.
+Close the connection to the Fastlane socket server and terminate the Fastlane socket server process.
 
 **Note**: This is run by default at the end of `withFastlane`
