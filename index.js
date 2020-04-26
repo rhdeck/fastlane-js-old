@@ -3,6 +3,79 @@ const { spawn } = require("child_process");
 const Deferred = require("es6-deferred");
 let port = 2000;
 let socket = null;
+class Fastlane {
+  constructor(port = 2000, isInteractive = true) {
+    this.port = port;
+    this.socket = null;
+    this.isInterfactive = isInteractive;
+    this.childProcess = null;
+  }
+  async start() {
+    if (!this.childProcess)
+      this.childProcess = await launch(isInteractive, this.port);
+    if (!this.socket) this.socket = await init(this.port);
+  }
+  async close() {
+    const { resolve, promise } = new Deferred();
+    const remove = once(this.socket, "error", () => {});
+    this.socket.end(() => {
+      remove();
+      socket = null;
+      this.childProcess.kill("SIGHUP");
+      this.childProcess = null;
+      resolve();
+    });
+    return promise;
+  }
+  async send({ commandType, command }) {
+    if (!socket) throw "Socket not initialized";
+    const json = JSON.stringify({ commandType, command });
+    this.socket.write(json);
+    const { resolve, promise, reject } = new Deferred();
+    this.socket.setEncoding("utf8");
+    const removeError = once(this.socket, "error", (d) => reject(d));
+    once("data", (d) => {
+      try {
+        removeError();
+        const o = JSON.parse(d);
+        try {
+          if (o.payload) {
+            if (o.payload.status === "failure") {
+              reject({
+                error: "fastlane_failure",
+                description: o.payload.failure_information.join("\n"),
+                raw: o,
+              });
+            } else if (typeof o.payload.return_object === "undefined") {
+              reject(o);
+            }
+            const result = o.payload.return_object;
+            resolve(result);
+          }
+        } catch (e) {
+          console.log("Problem resolving the payload after parsing");
+          reject(e);
+        }
+      } catch (e) {
+        console.log("Could not parse json", d);
+        removeError();
+        reject(e);
+      }
+    });
+    return promise;
+  }
+  async doAction(action, argObj) {
+    await this.start();
+    const args = argObj
+      ? Object.entries(argObj).map(([name, value]) => ({ name, value }))
+      : undefined;
+    const command = {
+      commandType: "action",
+      command: { methodName: action, args },
+    };
+    return this.send(command);
+  }
+}
 //#region Internal utility functions
 const asyncConnect = (options) => {
   const { resolve, reject, promise } = new Deferred();
@@ -19,22 +92,14 @@ const asyncConnect = (options) => {
   return promise;
 };
 const sleep = (ms) => new Promise((r) => setTimeout(() => r(), ms));
-let childProcess;
-const launch = (interactive = true) => {
-  childProcess = spawn(
+const launch = (interactive = true, port = 2000) => {
+  return spawn(
     "fastlane",
-    ["socket_server", "-c", "30", "-s"],
-    interactive
-      ? {
-          stdio: "inherit",
-        }
-      : {}
+    ["socket_server", "-c", "30", "-s", ...(port !== 2000 ? ["-p", port] : [])],
+    { ...(interactive ? { stdio: "inherit" } : {}) }
   );
 };
-const init = async (interactive = true, newPort = 2000) => {
-  if (!childProcess) launch(interactive);
-  if (socket) return socket;
-  // port = newPort; //Ignored for now because fastlane command line doesn't support setting the port
+const init = async (port = 2000) => {
   while (true) {
     const s = (
       await Promise.all(
@@ -47,11 +112,11 @@ const init = async (interactive = true, newPort = 2000) => {
         })
       )
     ).find(Boolean);
-    if (s) return (socket = s);
+    if (s) return s;
     sleep(500);
   }
 };
-const once = (event, f) => {
+const once = (socket, event, f) => {
   const listener = (d) => {
     socket.removeListener(event, listener);
     f(d);
@@ -59,76 +124,35 @@ const once = (event, f) => {
   socket.on(event, listener);
   return () => socket.removeListener(event, listener);
 };
-const send = async ({ commandType, command }) => {
-  if (!socket) throw "Socket not initialized";
-  const json = JSON.stringify({ commandType, command });
-  socket.write(json);
-  const { resolve, promise, reject } = new Deferred();
-  socket.setEncoding("utf8");
-  const removeError = once("error", (d) => reject(d));
-  once("data", (d) => {
-    try {
-      removeError();
-      const o = JSON.parse(d);
-      try {
-        if (o.payload) {
-          if (o.payload.status === "failure") {
-            reject({
-              error: "fastlane_failure",
-              description: o.payload.failure_information.join("\n"),
-              raw: o,
-            });
-          } else if (typeof o.payload.return_object === "undefined") {
-            reject(o);
-          }
-          const result = o.payload.return_object;
-          resolve(result);
-        }
-      } catch (e) {
-        console.log("Problem resolving the payload after parsing");
-        reject(e);
-      }
-    } catch (e) {
-      console.log("Could not parse json", d);
-      removeError();
-      reject(e);
-    }
-  });
-  return promise;
-};
 //#endregion
 //#region Exported Functions
-const close = async () => {
-  const { resolve, promise } = new Deferred();
-  const remove = once("error", () => {});
-  socket.end(() => {
-    remove();
-    socket = null;
-    childProcess.kill("SIGHUP");
-    childProcess = null;
-    resolve();
-  });
-  return promise;
-};
-const doAction = async (action, argObj) => {
-  await init();
-  const args = argObj
-    ? Object.entries(argObj).map(([name, value]) => ({ name, value }))
-    : undefined;
-  const command = {
-    commandType: "action",
-    command: { methodName: action, args },
-  };
-  return send(command);
-};
-const withFastlane = async (f, isInteractive) => {
-  await init(isInterActive);
-  const result = await f();
-  await close();
+
+const withFastlane = async (options, f) => {
+  port = 2000;
+  isInteractive = true;
+  if (!options) f = options;
+  else {
+    port = options.port;
+    isInteractive = options.isInteractive;
+  }
+  const fastlane = new Fastlane(port, isInteractive);
+  const result = await f(fastlane);
+  fastlane.close();
   return result;
 };
-const doActionOnce = async (action, argobj, isInteractive = true) =>
-  withFastLane(() => doAction(action, argobj), isInteractive);
+const doActionOnce = async (
+  action,
+  argobj,
+  isInteractive = true,
+  port = 2000
+) =>
+  withFastLane({ port, isInteractive }, ({ doAction }) =>
+    doAction(action, argobj)
+  );
 
 //#endregion
-module.exports = { doAction, close, doActionOnce, init, withFastlane };
+module.exports = {
+  Fastlane,
+  doActionOnce,
+  withFastlane,
+};
