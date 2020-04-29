@@ -1,6 +1,6 @@
 {
   "name": "@raydeck/fastlane",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "JS Interface for many fastlane actions designed for react-native ",
   "main": "index.js",
   "scripts": {
