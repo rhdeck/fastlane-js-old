@@ -17,24 +17,30 @@ class Fastlane {
   }
   async close() {
     const { resolve, promise } = new Deferred();
+    if (!this.socket) {
+      this.socket = null;
+      this.childProcess.kill("SIGHUP");
+      this.childProcess = null;
+      return;
+    }
     const remove = once(this.socket, "error", () => {});
     this.socket.end(() => {
       remove();
-      socket = null;
+      this.socket = null;
       this.childProcess.kill("SIGHUP");
       this.childProcess = null;
       resolve();
     });
-    return promise;
+    // return promise;
   }
   async send({ commandType, command }) {
-    if (!socket) throw "Socket not initialized";
+    if (!this.socket) throw "Socket not initialized";
     const json = JSON.stringify({ commandType, command });
     this.socket.write(json);
     const { resolve, promise, reject } = new Deferred();
     this.socket.setEncoding("utf8");
     const removeError = once(this.socket, "error", (d) => reject(d));
-    once("data", (d) => {
+    once(this.socket, "data", (d) => {
       try {
         removeError();
         const o = JSON.parse(d);
@@ -112,8 +118,10 @@ const init = async (port = 2000) => {
         })
       )
     ).find(Boolean);
-    if (s) return s;
-    sleep(500);
+    if (s) {
+      return s;
+    }
+    await sleep(500);
   }
 };
 const once = (socket, event, f) => {
@@ -130,15 +138,20 @@ const once = (socket, event, f) => {
 const withFastlane = async (options, f) => {
   port = 2000;
   isInteractive = true;
-  if (!options) f = options;
+  if (!f) f = options;
   else {
     port = options.port;
     isInteractive = options.isInteractive;
   }
   const fastlane = new Fastlane(port, isInteractive);
-  const result = await f(fastlane);
-  fastlane.close();
-  return result;
+  try {
+    const result = await f(fastlane);
+    fastlane.close();
+    return result;
+  } catch (e) {
+    await fastlane.close();
+    throw e;
+  }
 };
 const doActionOnce = async (
   action,
